@@ -1,0 +1,135 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JumperAI Game - Module 4</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'light-blue': '#E6F3FF',
+                        'light-grey': '#F0F0F0',
+                    },
+                },
+            },
+        }
+    </script>
+</head>
+<body class="min-h-screen flex flex-col bg-white text-gray-800">
+    <header class="bg-light-blue p-4 shadow-md">
+        <nav class="container mx-auto flex justify-between items-center">
+            <h1 class="text-2xl font-bold text-gray-800">JumperAI Game - Module 4</h1>
+            <div>
+                <a href="https://hub-world.onrender.com" class="bg-white text-gray-800 px-4 py-2 rounded shadow hover:bg-gray-100 transition-colors mr-2">
+                    Back to Hub
+                </a>
+                <a href="https://jumperai.org" class="bg-white text-gray-800 px-4 py-2 rounded shadow hover:bg-gray-100 transition-colors">
+                    Return to JumperAI
+                </a>
+            </div>
+        </nav>
+    </header>
+
+    <main class="flex-grow container mx-auto p-4">
+        <div class="w-full overflow-hidden rounded-lg shadow-lg">
+            <iframe id="module-4-frame" src="about:blank" width="1024" height="820" frameborder="0" allowfullscreen class="w-full"></iframe>
+        </div>
+    </main>
+
+    <footer class="bg-light-blue p-4 mt-8">
+        <div class="container mx-auto text-center text-gray-600">
+            <p>&copy; 2024 JumperAI. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script>
+        const SERVER_URL = 'https://game-progress-server.onrender.com'; // Replace with your actual server URL
+
+        async function fetchAndStoreToken() {
+            try {
+                const response = await fetch(`${SERVER_URL}/api/get-token`, {
+                    method: 'GET',
+                    credentials: 'include', // This is important for including cookies
+                });
+                if (!response.ok) {
+                    throw new Error('Failed to fetch token');
+                }
+                const data = await response.json();
+                localStorage.setItem('token', data.token);
+                return data.token;
+            } catch (error) {
+                console.error('Error fetching token:', error);
+                return null;
+            }
+        }
+
+        function getToken() {
+            return localStorage.getItem('token');
+        }
+
+        function setToken(token) {
+            localStorage.setItem('token', token);
+        }
+
+        function parseToken(token) {
+            const base64Url = token.split('.')[1];
+            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            return JSON.parse(window.atob(base64));
+        }
+
+        async function updateProgress(moduleId, completed, score, additionalData) {
+            const token = getToken();
+            if (!token) {
+                console.error('No token found. Progress cannot be saved.');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${SERVER_URL}/api/update-progress`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        moduleId,
+                        completed,
+                        score,
+                        additionalData
+                    }),
+                    credentials: 'include'
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to update progress');
+                }
+
+                const updatedToken = await response.json();
+                setToken(updatedToken.token);
+                console.log(`Progress updated for module ${moduleId}`);
+            } catch (error) {
+                console.error('Error updating progress:', error);
+            }
+        }
+
+        async function onModuleCompleted(moduleId, score, additionalData) {
+            await updateProgress(moduleId, true, score, additionalData);
+        }
+
+        window.getToken = getToken;
+        window.setToken = setToken;
+        window.parseToken = parseToken;
+        window.onModuleCompleted = onModuleCompleted;
+
+        // Fetch and store the token when the page loads, then load the iframe
+        document.addEventListener('DOMContentLoaded', async () => {
+            await fetchAndStoreToken();
+            document.getElementById('module-4-frame').src = 'https://module-4.onrender.com';
+        });
+    </script>
+</body>
+</html>
