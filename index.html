@@ -24,7 +24,7 @@
         <nav class="container mx-auto flex justify-between items-center">
             <h1 class="text-2xl font-bold text-gray-800">JumperAI Game - Module 4</h1>
             <div>
-                <a href="https://hub-world.onrender.com" class="bg-white text-gray-800 px-4 py-2 rounded shadow hover:bg-gray-100 transition-colors mr-2">
+                <a href="https://hubworldsite.onrender.com" class="bg-white text-gray-800 px-4 py-2 rounded shadow hover:bg-gray-100 transition-colors mr-2">
                     Back to Hub
                 </a>
                 <a href="https://jumperai.org" class="bg-white text-gray-800 px-4 py-2 rounded shadow hover:bg-gray-100 transition-colors">
@@ -36,7 +36,7 @@
 
     <main class="flex-grow container mx-auto p-4">
         <div class="w-full overflow-hidden rounded-lg shadow-lg">
-            <iframe id="module-4-frame" src="about:blank" width="1024" height="820" frameborder="0" allowfullscreen class="w-full"></iframe>
+            <iframe id="module-4-frame" src="https://module4jumperai.netlify.app/" width="1024" height="820" frameborder="0" allowfullscreen class="w-full"></iframe>
         </div>
     </main>
 
@@ -47,13 +47,13 @@
     </footer>
 
     <script>
-        const SERVER_URL = 'https://game-progress-server.onrender.com'; // Replace with your actual server URL
+        const SERVER_URL = 'https://jumperai-server.onrender.com'; // Replace with your actual server URL
 
         async function fetchAndStoreToken() {
             try {
                 const response = await fetch(`${SERVER_URL}/api/get-token`, {
                     method: 'GET',
-                    credentials: 'include', // This is important for including cookies
+                    credentials: 'include',
                 });
                 if (!response.ok) {
                     throw new Error('Failed to fetch token');
@@ -125,10 +125,9 @@
         window.parseToken = parseToken;
         window.onModuleCompleted = onModuleCompleted;
 
-        // Fetch and store the token when the page loads, then load the iframe
+        // Fetch and store the token when the page loads
         document.addEventListener('DOMContentLoaded', async () => {
             await fetchAndStoreToken();
-            document.getElementById('module-4-frame').src = 'https://module-4.onrender.com';
         });
     </script>
 </body>
