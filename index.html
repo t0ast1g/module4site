@@ -48,13 +48,10 @@
 
     <script>
         const SERVER_URL = 'https://game-progress-server.onrender.com';
+        const MODULE_ID = '4';
 
         function getToken() {
             return localStorage.getItem('token');
-        }
-
-        function setToken(token) {
-            localStorage.setItem('token', token);
         }
 
         function parseToken(token) {
@@ -64,7 +61,7 @@
             return JSON.parse(window.atob(base64));
         }
 
-        async function updateProgress(moduleId, completed, score, additionalData) {
+        async function updateProgress(completed, score, additionalData) {
             const token = getToken();
             if (!token) {
                 console.error('No token found. Progress cannot be saved.');
@@ -72,7 +69,7 @@
             }
 
             try {
-                const response = await fetch(`${SERVER_URL}/game-progress/${moduleId}`, {
+                const response = await fetch(`${SERVER_URL}/game-progress/${MODULE_ID}`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -91,26 +88,38 @@
                     throw new Error('Failed to update progress');
                 }
 
-                console.log(`Progress updated for module ${moduleId}`);
+                console.log(`Progress updated for module ${MODULE_ID}`);
             } catch (error) {
                 console.error('Error updating progress:', error);
             }
         }
 
-        async function onModuleCompleted(moduleId, score, additionalData) {
-            await updateProgress(moduleId, true, score, additionalData);
+        async function onModuleCompleted(score, additionalData) {
+            await updateProgress(true, score, additionalData);
         }
 
         window.getToken = getToken;
-        window.setToken = setToken;
         window.parseToken = parseToken;
         window.onModuleCompleted = onModuleCompleted;
 
-        // Set logged in state when the page loads
+        // Check login status when the page loads
         document.addEventListener('DOMContentLoaded', () => {
-            // Assuming the user is already logged in when this page loads
-            localStorage.setItem('isLoggedIn', 'true');
-            console.log('User is logged in.');
+            const token = getToken();
+            if (token) {
+                console.log('User is logged in.');
+            } else {
+                console.log('User is not logged in. Redirecting to hub...');
+                window.location.href = 'https://hubworldsite.onrender.com';
+            }
+        });
+
+        // Listen for messages from the iframe
+        window.addEventListener('message', (event) => {
+            if (event.origin !== "https://module4jumperai.netlify.app") return;
+            
+            if (event.data.type === 'MODULE_COMPLETED') {
+                onModuleCompleted(event.data.score, event.data.additionalData);
+            }
         });
     </script>
 </body>
