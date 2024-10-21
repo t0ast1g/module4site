@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>JumperAI Game - Module 4</title>
-    <script src="https://cdn.tailwindcss.com"></script><script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
         tailwind.config = {
             theme: {
                 extend: {
@@ -47,6 +48,7 @@
         const SERVER_URL = 'https://game-progress-server.onrender.com';
         const MODULE_ID = '4';
         const GAME_ORIGIN = 'https://module4jumperai.netlify.app';
+        const HUB_ORIGIN = 'https://hubworldsite.onrender.com';
 
         function getToken() {
             return localStorage.getItem('token');
@@ -115,7 +117,8 @@
                 console.log(`Progress loaded for module ${MODULE_ID}`, progress);
                 return progress;
             } catch (error) {
-                console.error('Error loading progress:', error);return null;
+                console.error('Error loading progress:', error);
+                return null;
             }
         }
 
@@ -146,7 +149,7 @@
                 if (data.token) {
                     localStorage.setItem('token', data.token);
                     sendTokenToGame(data.token);
-                return data.token;
+                    return data.token;
                 }
                 throw new Error('No token in refresh response');
             } catch (error) {
@@ -163,7 +166,8 @@
         document.addEventListener('DOMContentLoaded', async () => {
             const token = getToken();
             if (token) {
-                console.log('User is logged in.');sendTokenToGame(token);
+                console.log('User is logged in.');
+                sendTokenToGame(token);
                 const progress = await loadProgress();
                 if (progress) {
                     // Send loaded progress to game
@@ -172,7 +176,7 @@
                 }
             } else {
                 console.log('User is not logged in. Redirecting to hub...');
-                window.location.href = 'https://hubworldsite.onrender.com';
+                window.location.href = HUB_ORIGIN;
             }
 
             // Set up token refresh interval
@@ -181,7 +185,10 @@
 
         // Listen for messages from the iframe
         window.addEventListener('message', (event) => {
-            if (event.origin !== GAME_ORIGIN) return;
+            if (event.origin !== GAME_ORIGIN) {
+                console.log('Received message from unexpected origin:', event.origin);
+                return;
+            }
             
             if (event.data.type === 'MODULE_COMPLETED') {
                 onModuleCompleted(event.data.score, event.data.additionalData);
