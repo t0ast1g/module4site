@@ -50,8 +50,17 @@
         const GAME_ORIGIN = 'https://module4jumperai.netlify.app';
         const HUB_ORIGIN = 'https://hubworldsite.onrender.com';
 
+        function getTokenFromUrl() {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get('token');
+        }
+
         function getToken() {
             return localStorage.getItem('token');
+        }
+
+        function setToken(token) {
+            localStorage.setItem('token', token);
         }
 
         function parseToken(token) {
@@ -59,6 +68,22 @@
             const base64Url = token.split('.')[1];
             const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
             return JSON.parse(window.atob(base64));
+        }
+
+        async function validateToken(token) {
+            try {
+                const response = await fetch(`${SERVER_URL}/validate-token`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                const data = await response.json();
+                return data.valid;
+            } catch (error) {
+                console.error('Error validating token:', error);
+                return false;
+            }
         }
 
         async function updateProgress(completed, score, additionalData) {
@@ -147,11 +172,10 @@
                 });
                 const data = await response.json();
                 if (data.token) {
-                    localStorage.setItem('token', data.token);
+                    setToken(data.token);
                     sendTokenToGame(data.token);
-                    return data.token;
-                }
-                throw new Error('No token in refresh response');
+                return data.token;
+                }throw new Error('No token in refresh response');
             } catch (error) {
                 console.error('Error refreshing token:', error);
                 return null;
@@ -164,19 +188,44 @@
 
         // Check login status when the page loads
         document.addEventListener('DOMContentLoaded', async () => {
-            const token = getToken();
-            if (token) {
-                console.log('User is logged in.');
-                sendTokenToGame(token);
-                const progress = await loadProgress();
-                if (progress) {
-                    // Send loaded progress to game
-                    const gameFrame = document.getElementById('module-4-frame');
-                    gameFrame.contentWindow.postMessage({ type: 'LOAD_PROGRESS', progress }, GAME_ORIGIN);
+            const urlToken = getTokenFromUrl();
+            if (urlToken) {
+                console.log('Token found in URL, validating...');
+                const isValid = await validateToken(urlToken);
+                if (isValid) {
+                    console.log('Token from URL is valid. Setting token and proceeding...');
+                    setToken(urlToken);
+                    sendTokenToGame(urlToken);
+                    const progress = await loadProgress();
+                    if (progress) {
+                        const gameFrame = document.getElementById('module-4-frame');
+                        gameFrame.contentWindow.postMessage({ type: 'LOAD_PROGRESS', progress }, GAME_ORIGIN);
+                    }
+                } else {
+                    console.log('Token from URL is invalid. Redirecting to hub...');
+                    window.location.href = HUB_ORIGIN;
                 }
             } else {
-                console.log('User is not logged in. Redirecting to hub...');
-                window.location.href = HUB_ORIGIN;
+                const storedToken = getToken();
+                if (storedToken) {
+                    console.log('Token found in storage, validating...');
+                    const isValid = await validateToken(storedToken);
+                    if (isValid) {
+                        console.log('Stored token is valid. Proceeding...');
+                        sendTokenToGame(storedToken);
+                        const progress = await loadProgress();
+                        if (progress) {
+                            const gameFrame = document.getElementById('module-4-frame');
+                            gameFrame.contentWindow.postMessage({ type: 'LOAD_PROGRESS', progress }, GAME_ORIGIN);
+                        }
+                    } else {
+                        console.log('Stored token is invalid. Redirecting to hub...');
+                        window.location.href = HUB_ORIGIN;
+                    }
+                } else {
+                    console.log('No token found. Redirecting to hub...');
+                    window.location.href = HUB_ORIGIN;
+                }
             }
 
             // Set up token refresh interval
