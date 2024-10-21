@@ -1,19 +1,16 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>JumperAI Game - Module 4</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
+    <script src="https://cdn.tailwindcss.com"></script><script>
         tailwind.config = {
             theme: {
                 extend: {
                     colors: {
                         'light-blue': '#E6F3FF',
-                        'light-grey': '#F0F0F0',
-                    },
+                        'light-grey': '#F0F0F0',},
                 },
             },
         }
@@ -49,6 +46,7 @@
     <script>
         const SERVER_URL = 'https://game-progress-server.onrender.com';
         const MODULE_ID = '4';
+        const GAME_ORIGIN = 'https://module4jumperai.netlify.app';
 
         function getToken() {
             return localStorage.getItem('token');
@@ -94,8 +92,67 @@
             }
         }
 
+        async function loadProgress() {
+            const token = getToken();
+            if (!token) {
+                console.error('No token found. Progress cannot be loaded.');
+                return null;
+            }
+
+            try {
+                const response = await fetch(`${SERVER_URL}/game-progress/${MODULE_ID}`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to load progress');
+                }
+
+                const progress = await response.json();
+                console.log(`Progress loaded for module ${MODULE_ID}`, progress);
+                return progress;
+            } catch (error) {
+                console.error('Error loading progress:', error);return null;
+            }
+        }
+
         async function onModuleCompleted(score, additionalData) {
             await updateProgress(true, score, additionalData);
+        }
+
+        function sendTokenToGame(token) {
+            const gameFrame = document.getElementById('module-4-frame');
+            if (gameFrame && gameFrame.contentWindow) {
+                console.log('Sending token to game frame');
+                gameFrame.contentWindow.postMessage({ type: 'SET_TOKEN', token: token }, GAME_ORIGIN);
+            } else {
+                console.error('Game frame not found or not ready');
+            }
+        }
+
+        async function refreshToken() {
+            try {
+                const response = await fetch(`${SERVER_URL}/refresh-token`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${getToken()}`
+                    }
+                });
+                const data = await response.json();
+                if (data.token) {
+                    localStorage.setItem('token', data.token);
+                    sendTokenToGame(data.token);
+                return data.token;
+                }
+                throw new Error('No token in refresh response');
+            } catch (error) {
+                console.error('Error refreshing token:', error);
+                return null;
+            }
         }
 
         window.getToken = getToken;
@@ -103,22 +160,35 @@
         window.onModuleCompleted = onModuleCompleted;
 
         // Check login status when the page loads
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', async () => {
             const token = getToken();
             if (token) {
-                console.log('User is logged in.');
+                console.log('User is logged in.');sendTokenToGame(token);
+                const progress = await loadProgress();
+                if (progress) {
+                    // Send loaded progress to game
+                    const gameFrame = document.getElementById('module-4-frame');
+                    gameFrame.contentWindow.postMessage({ type: 'LOAD_PROGRESS', progress }, GAME_ORIGIN);
+                }
             } else {
                 console.log('User is not logged in. Redirecting to hub...');
                 window.location.href = 'https://hubworldsite.onrender.com';
             }
+
+            // Set up token refresh interval
+            setInterval(refreshToken, 30 * 60 * 1000); // Refresh every 30 minutes
         });
 
         // Listen for messages from the iframe
         window.addEventListener('message', (event) => {
-            if (event.origin !== "https://module4jumperai.netlify.app") return;
+            if (event.origin !== GAME_ORIGIN) return;
             
             if (event.data.type === 'MODULE_COMPLETED') {
                 onModuleCompleted(event.data.score, event.data.additionalData);
+            } else if (event.data.type === 'GET_TOKEN') {
+                sendTokenToGame(getToken());
+            } else if (event.data.type === 'REFRESH_TOKEN') {
+                refreshToken();
             }
         });
     </script>
