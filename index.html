@@ -174,8 +174,9 @@
                 if (data.token) {
                     setToken(data.token);
                     sendTokenToGame(data.token);
-                return data.token;
-                }throw new Error('No token in refresh response');
+                    return data.token;
+                }
+                throw new Error('No token in refresh response');
             } catch (error) {
                 console.error('Error refreshing token:', error);
                 return null;
@@ -202,8 +203,8 @@
                         gameFrame.contentWindow.postMessage({ type: 'LOAD_PROGRESS', progress }, GAME_ORIGIN);
                     }
                 } else {
-                    console.log('Token from URL is invalid. Redirecting to hub...');
-                    window.location.href = HUB_ORIGIN;
+                    console.log('Token from URL is invalid. Redirection disabled for debugging.');
+                    // window.location.href = HUB_ORIGIN; // Commented out to prevent redirection
                 }
             } else {
                 const storedToken = getToken();
@@ -219,12 +220,12 @@
                             gameFrame.contentWindow.postMessage({ type: 'LOAD_PROGRESS', progress }, GAME_ORIGIN);
                         }
                     } else {
-                        console.log('Stored token is invalid. Redirecting to hub...');
-                        window.location.href = HUB_ORIGIN;
+                        console.log('Stored token is invalid. Redirection disabled for debugging.');
+                        // window.location.href = HUB_ORIGIN; // Commented out to prevent redirection
                     }
                 } else {
-                    console.log('No token found. Redirecting to hub...');
-                    window.location.href = HUB_ORIGIN;
+                    console.log('No token found. Redirection disabled for debugging.');
+                    // window.location.href = HUB_ORIGIN; // Commented out to prevent redirection
                 }
             }
 
@@ -239,6 +240,7 @@
                 return;
             }
             
+            console.log('Received message from game frame:', event.data);
             if (event.data.type === 'MODULE_COMPLETED') {
                 onModuleCompleted(event.data.score, event.data.additionalData);
             } else if (event.data.type === 'GET_TOKEN') {
