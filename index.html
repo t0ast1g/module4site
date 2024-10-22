@@ -24,8 +24,7 @@
             <div>
                 <a href="https://hubworldsite.onrender.com" class="bg-white text-gray-800 px-4 py-2 rounded shadow hover:bg-gray-100 transition-colors mr-2">
                     Back to Hub
-                </a>
-                <a href="https://jumperai.org" class="bg-white text-gray-800 px-4 py-2 rounded shadow hover:bg-gray-100 transition-colors">
+                </a><a href="https://jumperai.org" class="bg-white text-gray-800 px-4 py-2 rounded shadow hover:bg-gray-100 transition-colors">
                     Return to JumperAI
                 </a>
             </div>
@@ -50,16 +49,7 @@
         const GAME_ORIGINS = ['https://module4jumperai.netlify.app', 'https://module-4-n7mq.onrender.com'];
         const HUB_ORIGIN = 'https://hubworldsite.onrender.com';
 
-        // Ensure these functions are always available on the window object
-        window.getToken = function() {
-            return localStorage.getItem('token') || null;
-        };
-
-        window.setToken = function(token) {
-            localStorage.setItem('token', token);window.storedToken = token; // Store token in a global variable for Unity to access
-        };
-
-        window.parseToken = function(token) {
+        function parseToken(token) {
             if (!token) return null;
             try {
                 const base64Url = token.split('.')[1];
@@ -69,9 +59,9 @@
                 console.error('Error parsing token:', error);
                 return null;
             }
-        };
+        }
 
-        window.validateToken = async function(token) {
+        async function validateToken(token) {
             try {
                 const response = await fetch(`${SERVER_URL}/validate-token`, {
                     method: 'GET',
@@ -85,10 +75,10 @@
                 console.error('Error validating token:', error);
                 return false;
             }
-        };
+        }
 
-        window.updateProgress = async function(completed, score, additionalData) {
-            const token = window.getToken();
+        async function updateProgress(completed, score, additionalData) {
+            const token = localStorage.getItem('token');
             if (!token) {
                 console.error('No token found. Progress cannot be saved.');
                 return;
@@ -118,10 +108,10 @@
             } catch (error) {
                 console.error('Error updating progress:', error);
             }
-        };
+        }
 
-        window.loadProgress = async function() {
-            const token = window.getToken();
+        async function loadProgress() {
+            const token = localStorage.getItem('token');
             if (!token) {
                 console.error('No token found. Progress cannot be loaded.');
                 return null;
@@ -146,45 +136,45 @@
                 console.error('Error loading progress:', error);
                 return null;
             }
-        };
+        }
 
-        window.onModuleCompleted = async function(score, additionalData) {
-            await window.updateProgress(true, score, additionalData);
-        };
+        async function onModuleCompleted(score, additionalData) {
+            await updateProgress(true, score, additionalData);
+        }
 
-        window.sendTokenToGame = function(token) {
+        function sendTokenToGame(token) {
             const gameFrame = document.getElementById('module-4-frame');
             if (gameFrame && gameFrame.contentWindow) {
                 console.log('Sending token to game frame:', token);
                 GAME_ORIGINS.forEach(origin => {
-                    gameFrame.contentWindow.postMessage({ type: 'SET_TOKEN', token: token }, origin);
+                    gameFrame.contentWindow.postMessage({ type: 'TOKEN_STORED' }, origin);
                 });
             } else {
                 console.error('Game frame not found or not ready');
             }
-        };
+        }
 
-        window.refreshToken = async function() {
+        async function refreshToken() {
             try {
+                const currentToken = localStorage.getItem('token');
                 const response = await fetch(`${SERVER_URL}/refresh-token`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${window.getToken()}`
+                        'Authorization': `Bearer ${currentToken}`
                     }
                 });
                 const data = await response.json();
                 if (data.token) {
-                    window.setToken(data.token);
-                    window.sendTokenToGame(data.token);
-                    return data.token;
-                }
-                throw new Error('No token in refresh response');
+                    localStorage.setItem('token', data.token);
+                    sendTokenToGame(data.token);
+                return data.token;
+                }throw new Error('No token in refresh response');
             } catch (error) {
                 console.error('Error refreshing token:', error);
                 return null;
             }
-        };
+        }
 
         // Immediately invoke function to set up event listeners and initialize
         (function() {
@@ -192,27 +182,28 @@
                 const urlToken = new URLSearchParams(window.location.search).get('token');
                 if (urlToken) {
                     console.log('Token found in URL, validating...');
-                    const isValid = await window.validateToken(urlToken);
+                    const isValid = await validateToken(urlToken);
                     if (isValid) {
-                        console.log('Token from URL is valid. Setting token and proceeding...');
-                        window.setToken(urlToken);
-                        window.sendTokenToGame(urlToken);
-                        const progress = await window.loadProgress();
+                        console.log('Token from URL is valid. Storing token and proceeding...');
+                        localStorage.setItem('token', urlToken);
+                        sendTokenToGame(urlToken);
+                        const progress = await loadProgress();
                         if (progress) {
                             const gameFrame = document.getElementById('module-4-frame');
                             gameFrame.contentWindow.postMessage({ type: 'LOAD_PROGRESS', progress }, GAME_ORIGINS[0]);
                         }
                     } else {
-                        console.log('Token from URL is invalid.');}
+                        console.log('Token from URL is invalid.');
+                    }
                 } else {
-                    const storedToken = window.getToken();
+                    const storedToken = localStorage.getItem('token');
                     if (storedToken) {
                         console.log('Token found in storage, validating...');
-                        const isValid = await window.validateToken(storedToken);
+                        const isValid = await validateToken(storedToken);
                         if (isValid) {
                             console.log('Stored token is valid. Proceeding...');
-                            window.sendTokenToGame(storedToken);
-                            const progress = await window.loadProgress();
+                            sendTokenToGame(storedToken);
+                            const progress = await loadProgress();
                             if (progress) {
                                 const gameFrame = document.getElementById('module-4-frame');
                                 gameFrame.contentWindow.postMessage({ type: 'LOAD_PROGRESS', progress }, GAME_ORIGINS[0]);
@@ -226,7 +217,7 @@
                 }
 
                 // Set up token refresh interval
-                setInterval(window.refreshToken, 30 * 60 * 1000); // Refresh every 30 minutes
+                setInterval(refreshToken, 30 * 60 * 1000); // Refresh every 30 minutes
             });
 
             // Listen for messages from the iframe
@@ -235,19 +226,20 @@
                     console.log('Received message from unexpected origin:', event.origin);
                     return;
                 }
+                
                 console.log('Received message from game frame:', event.data);
                 if (event.data.type === 'MODULE_COMPLETED') {
-                    window.onModuleCompleted(event.data.score, event.data.additionalData);
+                    onModuleCompleted(event.data.score, event.data.additionalData);
                 } else if (event.data.type === 'GET_TOKEN') {
-                    const token = window.getToken();
-                    console.log('Sending token to game:', token);
-                    window.sendTokenToGame(token);
+                    const token = localStorage.getItem('token');
+                    console.log('Token requested by game:', token);
+                    sendTokenToGame(token);
                 } else if (event.data.type === 'REFRESH_TOKEN') {
-                    window.refreshToken();
+                    refreshToken();
                 }
             });
 
-            console.log('Token management functions attached to window object');
+            console.log('Token management setup complete');
         })();
     </script>
 </body>
