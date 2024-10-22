@@ -47,22 +47,16 @@
     <script>
         const SERVER_URL = 'https://game-progress-server.onrender.com';
         const MODULE_ID = '4';
-        const GAME_ORIGIN = 'https://module4jumperai.netlify.app';
+        const GAME_ORIGINS = ['https://module4jumperai.netlify.app', 'https://module-4-n7mq.onrender.com'];
         const HUB_ORIGIN = 'https://hubworldsite.onrender.com';
 
-        // Explicitly declare functions in the global scope
-        window.getTokenFromUrl = function() {
-            const urlParams = new URLSearchParams(window.location.search);
-            return urlParams.get('token');
-        };
-
+        // Ensure these functions are always available on the window object
         window.getToken = function() {
             return localStorage.getItem('token') || null;
         };
 
         window.setToken = function(token) {
-            localStorage.setItem('token', token);
-            window.storedToken = token; // Store token in a global variable for Unity to access
+            localStorage.setItem('token', token);window.storedToken = token; // Store token in a global variable for Unity to access
         };
 
         window.parseToken = function(token) {
@@ -161,8 +155,10 @@
         window.sendTokenToGame = function(token) {
             const gameFrame = document.getElementById('module-4-frame');
             if (gameFrame && gameFrame.contentWindow) {
-                console.log('Sending token to game frame');
-                gameFrame.contentWindow.postMessage({ type: 'SET_TOKEN', token: token }, GAME_ORIGIN);
+                console.log('Sending token to game frame:', token);
+                GAME_ORIGINS.forEach(origin => {
+                    gameFrame.contentWindow.postMessage({ type: 'SET_TOKEN', token: token }, origin);
+                });
             } else {
                 console.error('Game frame not found or not ready');
             }
@@ -190,71 +186,69 @@
             }
         };
 
-        // Check login status when the page loads
-        document.addEventListener('DOMContentLoaded', async () => {
-            const urlToken = window.getTokenFromUrl();
-            if (urlToken) {
-                console.log('Token found in URL, validating...');
-                const isValid = await window.validateToken(urlToken);
-                if (isValid) {
-                    console.log('Token from URL is valid. Setting token and proceeding...');
-                    window.setToken(urlToken);
-                    window.sendTokenToGame(urlToken);
-                    const progress = await window.loadProgress();
-                    if (progress) {
-                        const gameFrame = document.getElementById('module-4-frame');
-                        gameFrame.contentWindow.postMessage({ type: 'LOAD_PROGRESS', progress }, GAME_ORIGIN);
-                    }
-                } else {
-                    console.log('Token from URL is invalid. Redirection disabled for debugging.');
-                    // window.location.href = HUB_ORIGIN; // Commented out to prevent redirection
-                }
-            } else {
-                const storedToken = window.getToken();
-                if (storedToken) {
-                    console.log('Token found in storage, validating...');
-                    const isValid = await window.validateToken(storedToken);
+        // Immediately invoke function to set up event listeners and initialize
+        (function() {
+            document.addEventListener('DOMContentLoaded', async () => {
+                const urlToken = new URLSearchParams(window.location.search).get('token');
+                if (urlToken) {
+                    console.log('Token found in URL, validating...');
+                    const isValid = await window.validateToken(urlToken);
                     if (isValid) {
-                        console.log('Stored token is valid. Proceeding...');
-                        window.sendTokenToGame(storedToken);
+                        console.log('Token from URL is valid. Setting token and proceeding...');
+                        window.setToken(urlToken);
+                        window.sendTokenToGame(urlToken);
                         const progress = await window.loadProgress();
                         if (progress) {
                             const gameFrame = document.getElementById('module-4-frame');
-                            gameFrame.contentWindow.postMessage({ type: 'LOAD_PROGRESS', progress }, GAME_ORIGIN);
+                            gameFrame.contentWindow.postMessage({ type: 'LOAD_PROGRESS', progress }, GAME_ORIGINS[0]);
                         }
                     } else {
-                        console.log('Stored token is invalid. Redirection disabled for debugging.');
-                        // window.location.href = HUB_ORIGIN; // Commented out to prevent redirection
-                    }
+                        console.log('Token from URL is invalid.');}
                 } else {
-                    console.log('No token found. Redirection disabled for debugging.');
-                    // window.location.href = HUB_ORIGIN; // Commented out to prevent redirection
+                    const storedToken = window.getToken();
+                    if (storedToken) {
+                        console.log('Token found in storage, validating...');
+                        const isValid = await window.validateToken(storedToken);
+                        if (isValid) {
+                            console.log('Stored token is valid. Proceeding...');
+                            window.sendTokenToGame(storedToken);
+                            const progress = await window.loadProgress();
+                            if (progress) {
+                                const gameFrame = document.getElementById('module-4-frame');
+                                gameFrame.contentWindow.postMessage({ type: 'LOAD_PROGRESS', progress }, GAME_ORIGINS[0]);
+                            }
+                        } else {
+                            console.log('Stored token is invalid.');
+                        }
+                    } else {
+                        console.log('No token found.');
+                    }
                 }
-            }
 
-            // Set up token refresh interval
-            setInterval(window.refreshToken, 30 * 60 * 1000); // Refresh every 30 minutes
-        });
+                // Set up token refresh interval
+                setInterval(window.refreshToken, 30 * 60 * 1000); // Refresh every 30 minutes
+            });
 
-        // Listen for messages from the iframe
-        window.addEventListener('message', (event) => {
-            if (event.origin !== GAME_ORIGIN) {
-                console.log('Received message from unexpected origin:', event.origin);
-                return;
-            }
-            
-            console.log('Received message from game frame:', event.data);
-            if (event.data.type === 'MODULE_COMPLETED') {
-                window.onModuleCompleted(event.data.score, event.data.additionalData);
-            } else if (event.data.type === 'GET_TOKEN') {
-                window.sendTokenToGame(window.getToken());
-            } else if (event.data.type === 'REFRESH_TOKEN') {
-                window.refreshToken();
-            }
-        });
+            // Listen for messages from the iframe
+            window.addEventListener('message', (event) => {
+                if (!GAME_ORIGINS.includes(event.origin)) {
+                    console.log('Received message from unexpected origin:', event.origin);
+                    return;
+                }
+                console.log('Received message from game frame:', event.data);
+                if (event.data.type === 'MODULE_COMPLETED') {
+                    window.onModuleCompleted(event.data.score, event.data.additionalData);
+                } else if (event.data.type === 'GET_TOKEN') {
+                    const token = window.getToken();
+                    console.log('Sending token to game:', token);
+                    window.sendTokenToGame(token);
+                } else if (event.data.type === 'REFRESH_TOKEN') {
+                    window.refreshToken();
+                }
+            });
 
-        // Ensure functions are available immediately
-        console.log('Token management functions attached to window object');
+            console.log('Token management functions attached to window object');
+        })();
     </script>
 </body>
 </html>
