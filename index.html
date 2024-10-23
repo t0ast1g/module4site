@@ -49,6 +49,7 @@
         const MODULE_ID = '4';
         const GAME_ORIGINS = ['https://module4jumperai.netlify.app', 'https://module-4-n7mq.onrender.com'];
         const HUB_ORIGIN = 'https://hubworldsite.onrender.com';
+        let currentToken = null;
 
         function parseToken(token) {
             if (!token) return null;
@@ -79,8 +80,7 @@
         }
 
         async function updateProgress(completed, score, additionalData) {
-            const token = localStorage.getItem('token');
-            if (!token) {
+            if (!currentToken) {
                 console.error('No token found. Progress cannot be saved.');
                 return;
             }
@@ -90,7 +90,7 @@
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
+                        'Authorization': `Bearer ${currentToken}`
                     },
                     body: JSON.stringify({
                         progress: {
@@ -112,8 +112,7 @@
         }
 
         async function loadProgress() {
-            const token = localStorage.getItem('token');
-            if (!token) {
+            if (!currentToken) {
                 console.error('No token found. Progress cannot be loaded.');
                 return null;
             }
@@ -122,7 +121,7 @@
                 const response = await fetch(`${SERVER_URL}/game-progress/${MODULE_ID}`, {
                     method: 'GET',
                     headers: {
-                        'Authorization': `Bearer ${token}`
+                        'Authorization': `Bearer ${currentToken}`
                     }
                 });
 
@@ -169,7 +168,6 @@
 
         async function refreshToken() {
             try {
-                const currentToken = localStorage.getItem('token');
                 const response = await fetch(`${SERVER_URL}/refresh-token`, {
                     method: 'POST',
                     headers: {
@@ -181,8 +179,7 @@
                 if (data.token) {
                     await storeTokenWithRetry(data.token);
                     return data.token;
-                }
-                throw new Error('No token in refresh response');
+                }throw new Error('No token in refresh response');
             } catch (error) {
                 console.error('Error refreshing token:', error);
                 return null;
@@ -194,6 +191,7 @@
             while (retries < maxRetries) {
                 try {
                     localStorage.setItem('token', token);
+                    currentToken = token;
                     if (localStorage.getItem('token') === token) {
                         console.log('Token successfully stored in localStorage');
                         startTokenSendingInterval(token);
@@ -202,8 +200,7 @@
                 } catch (error) {
                     console.error('Error storing token:', error);
                 }
-                retries++;
-                await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retrying
+                retries++;await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retrying
             }
             console.error('Failed to store token after multiple attempts');
             return false;
@@ -218,13 +215,7 @@
                     const isValid = await validateToken(urlToken);
                     if (isValid) {
                         console.log('Token from URL is valid. Storing token and proceeding...');
-                        await storeTokenWithRetry(urlToken);
-                        const progress = await loadProgress();
-                        if (progress) {
-                            const gameFrame = document.getElementById('module-4-frame');
-                            gameFrame.contentWindow.postMessage({ type: 'LOAD_PROGRESS', progress }, GAME_ORIGINS[0]);
-                        }
-                    } else {
+                        await storeTokenWithRetry(urlToken);} else {
                         console.log('Token from URL is invalid.');
                     }
                 } else {
@@ -234,22 +225,28 @@
                         const isValid = await validateToken(storedToken);
                         if (isValid) {
                             console.log('Stored token is valid. Proceeding...');
+                            currentToken = storedToken;
                             startTokenSendingInterval(storedToken);
-                            const progress = await loadProgress();
-                            if (progress) {
-                                const gameFrame = document.getElementById('module-4-frame');
-                                gameFrame.contentWindow.postMessage({ type: 'LOAD_PROGRESS', progress }, GAME_ORIGINS[0]);
-                            }
                         } else {
-                            console.log('Stored token is invalid.');localStorage.removeItem('token');
+                            console.log('Stored token is invalid.');
+                            localStorage.removeItem('token');
+                currentToken = null;
                         }
                     } else {
                         console.log('No token found.');
                     }
                 }
+
+                if (currentToken) {
+                    const progress = await loadProgress();
+                    if (progress) {
+                        const gameFrame = document.getElementById('module-4-frame');
+                        gameFrame.contentWindow.postMessage({ type: 'LOAD_PROGRESS', progress }, GAME_ORIGINS[0]);
+                    }
+                }
             }
 
-            document.addEventListener('DOMContentLoaded', initializeToken);
+            await initializeToken();
 
             // Set up token refresh interval
             setInterval(refreshToken, 30 * 60 * 1000); // Refresh every 30 minutes
@@ -260,13 +257,13 @@
                     console.log('Received message from unexpected origin:', event.origin);
                     return;
                 }
+                
                 console.log('Received message from game frame:', event.data);
                 if (event.data.type === 'MODULE_COMPLETED') {
                     onModuleCompleted(event.data.score, event.data.additionalData);
                 } else if (event.data.type === 'GET_TOKEN') {
-                    const token = localStorage.getItem('token');
-                    console.log('Token requested by game:', token);
-                    sendTokenToGame(token);
+                    console.log('Token requested by game:', currentToken);
+                    sendTokenToGame(currentToken);
                 } else if (event.data.type === 'REFRESH_TOKEN') {
                     refreshToken();
                 }
