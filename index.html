@@ -147,11 +147,22 @@
             if (gameFrame && gameFrame.contentWindow) {
                 console.log('Sending token to game frame:', token);
                 GAME_ORIGINS.forEach(origin => {
-                    gameFrame.contentWindow.postMessage({ type: 'TOKEN_STORED' }, origin);
+                    gameFrame.contentWindow.postMessage({ type: 'SET_TOKEN', token: token }, origin);
                 });
             } else {
                 console.error('Game frame not found or not ready');
             }
+        }
+
+        function startTokenSendingInterval(token) {
+            const sendInterval = setInterval(() => {
+                sendTokenToGame(token);
+            }, 1000); // Send every second
+
+            // Stop sending after 10 seconds
+            setTimeout(() => {
+                clearInterval(sendInterval);console.log('Stopped sending token to game frame');
+            }, 10000);
         }
 
         async function refreshToken() {
@@ -167,9 +178,10 @@
                 const data = await response.json();
                 if (data.token) {
                     localStorage.setItem('token', data.token);
-                    sendTokenToGame(data.token);
-                return data.token;
-                }throw new Error('No token in refresh response');
+                    startTokenSendingInterval(data.token);
+                    return data.token;
+                }
+                throw new Error('No token in refresh response');
             } catch (error) {
                 console.error('Error refreshing token:', error);
                 return null;
@@ -186,7 +198,7 @@
                     if (isValid) {
                         console.log('Token from URL is valid. Storing token and proceeding...');
                         localStorage.setItem('token', urlToken);
-                        sendTokenToGame(urlToken);
+                        startTokenSendingInterval(urlToken);
                         const progress = await loadProgress();
                         if (progress) {
                             const gameFrame = document.getElementById('module-4-frame');
@@ -202,7 +214,7 @@
                         const isValid = await validateToken(storedToken);
                         if (isValid) {
                             console.log('Stored token is valid. Proceeding...');
-                            sendTokenToGame(storedToken);
+                            startTokenSendingInterval(storedToken);
                             const progress = await loadProgress();
                             if (progress) {
                                 const gameFrame = document.getElementById('module-4-frame');
