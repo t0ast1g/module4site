@@ -24,7 +24,8 @@
             <div>
                 <a href="https://hubworldsite.onrender.com" class="bg-white text-gray-800 px-4 py-2 rounded shadow hover:bg-gray-100 transition-colors mr-2">
                     Back to Hub
-                </a><a href="https://jumperai.org" class="bg-white text-gray-800 px-4 py-2 rounded shadow hover:bg-gray-100 transition-colors">
+                </a>
+                <a href="https://jumperai.org" class="bg-white text-gray-800 px-4 py-2 rounded shadow hover:bg-gray-100 transition-colors">
                     Return to JumperAI
                 </a>
             </div>
@@ -161,7 +162,8 @@
 
             // Stop sending after 10 seconds
             setTimeout(() => {
-                clearInterval(sendInterval);console.log('Stopped sending token to game frame');
+                clearInterval(sendInterval);
+                console.log('Stopped sending token to game frame');
             }, 10000);
         }
 
@@ -177,8 +179,7 @@
                 });
                 const data = await response.json();
                 if (data.token) {
-                    localStorage.setItem('token', data.token);
-                    startTokenSendingInterval(data.token);
+                    await storeTokenWithRetry(data.token);
                     return data.token;
                 }
                 throw new Error('No token in refresh response');
@@ -188,17 +189,36 @@
             }
         }
 
+        async function storeTokenWithRetry(token, maxRetries = 5) {
+            let retries = 0;
+            while (retries < maxRetries) {
+                try {
+                    localStorage.setItem('token', token);
+                    if (localStorage.getItem('token') === token) {
+                        console.log('Token successfully stored in localStorage');
+                        startTokenSendingInterval(token);
+                        return true;
+                    }
+                } catch (error) {
+                    console.error('Error storing token:', error);
+                }
+                retries++;
+                await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retrying
+            }
+            console.error('Failed to store token after multiple attempts');
+            return false;
+        }
+
         // Immediately invoke function to set up event listeners and initialize
-        (function() {
-            document.addEventListener('DOMContentLoaded', async () => {
+        (async function() {
+            async function initializeToken() {
                 const urlToken = new URLSearchParams(window.location.search).get('token');
                 if (urlToken) {
                     console.log('Token found in URL, validating...');
                     const isValid = await validateToken(urlToken);
                     if (isValid) {
                         console.log('Token from URL is valid. Storing token and proceeding...');
-                        localStorage.setItem('token', urlToken);
-                        startTokenSendingInterval(urlToken);
+                        await storeTokenWithRetry(urlToken);
                         const progress = await loadProgress();
                         if (progress) {
                             const gameFrame = document.getElementById('module-4-frame');
@@ -221,16 +241,18 @@
                                 gameFrame.contentWindow.postMessage({ type: 'LOAD_PROGRESS', progress }, GAME_ORIGINS[0]);
                             }
                         } else {
-                            console.log('Stored token is invalid.');
+                            console.log('Stored token is invalid.');localStorage.removeItem('token');
                         }
                     } else {
                         console.log('No token found.');
                     }
                 }
+            }
 
-                // Set up token refresh interval
-                setInterval(refreshToken, 30 * 60 * 1000); // Refresh every 30 minutes
-            });
+            document.addEventListener('DOMContentLoaded', initializeToken);
+
+            // Set up token refresh interval
+            setInterval(refreshToken, 30 * 60 * 1000); // Refresh every 30 minutes
 
             // Listen for messages from the iframe
             window.addEventListener('message', (event) => {
@@ -238,7 +260,6 @@
                     console.log('Received message from unexpected origin:', event.origin);
                     return;
                 }
-                
                 console.log('Received message from game frame:', event.data);
                 if (event.data.type === 'MODULE_COMPLETED') {
                     onModuleCompleted(event.data.score, event.data.additionalData);
