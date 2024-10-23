@@ -36,6 +36,8 @@
         <div class="w-full overflow-hidden rounded-lg shadow-lg">
             <iframe id="module-4-frame" src="https://module4jumperai.netlify.app/" width="1024" height="820" frameborder="0" allowfullscreen class="w-full"></iframe>
         </div>
+        <!-- Progress Status Display -->
+        <div id="progress-status" class="mt-4 p-4 rounded-lg hidden"></div>
     </main>
 
     <footer class="bg-light-blue p-4 mt-8">
@@ -52,11 +54,22 @@
         const HUB_ORIGIN = 'https://hubworldsite.onrender.com';
         let currentToken = null;
 
+        // Progress status display function
+        function showProgressStatus(message, isError = false) {
+            const statusDiv = document.getElementById('progress-status');
+            statusDiv.className = `mt-4 p-4 rounded-lg ${isError ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`;
+            statusDiv.textContent = message;
+            statusDiv.classList.remove('hidden');setTimeout(() => {
+                statusDiv.classList.add('hidden');
+            }, 5000);
+        }
+
         function parseToken(token) {
             if (!token) return null;
             try {
                 const base64Url = token.split('.')[1];
-                const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');return JSON.parse(window.atob(base64));
+                const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+                return JSON.parse(window.atob(base64));
             } catch (error) {
                 console.error('Error parsing token:', error);
                 return null;
@@ -121,22 +134,57 @@
             gameFrame.src = gameUrlWithToken;
         }
 
+        async function verifyProgressSaved(completed, score) {
+            try {
+                const response = await fetch(`${SERVER_URL}/game-progress/${MODULE_ID}`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${currentToken}`
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to verify progress');
+                }
+
+                const savedProgress = await response.json();
+                return savedProgress.completed === completed && savedProgress.score === score;
+            } catch (error) {
+                console.error('Error verifying progress:', error);
+                return false;
+            }
+        }
+
         async function handleMessage(event) {
             if (!GAME_ORIGINS.includes(event.origin)) {
                 console.log('Received message from unexpected origin:', event.origin);
                 return;
             }
-            
             console.log('Received message from game frame:', event.data);
             if (event.data.type === 'MODULE_COMPLETED') {
-                await updateProgress(true, event.data.score, event.data.additionalData);
+                const success = await updateProgress(true, event.data.score, event.data.additionalData);
+                if (success) {
+                    // Verify the progress was actually saved
+                    const verified = await verifyProgressSaved(true, event.data.score);
+                    if (verified) {
+                        showProgressStatus('Progress saved and verified successfully!');// Notify the game that the progress was saved
+                        const gameFrame = document.getElementById('module-4-frame');
+                        gameFrame.contentWindow.postMessage({ type: 'PROGRESS_SAVED', success: true }, event.origin);
+                    } else {
+                        showProgressStatus('Failed to verify progress save', true);
+                        // Retry saving progress
+                        await updateProgress(true, event.data.score, event.data.additionalData);
+                    }
+                } else {
+                    showProgressStatus('Failed to save progress', true);
+                }
             } else if (event.data.type === 'REFRESH_TOKEN') {
                 const newToken = await refreshToken();
                 if (newToken) {
                     updateGameFrameSrc(newToken);
                 } else {
                     console.error('Failed to refresh token on game request');
-                    // TODO: Handle failed refresh (e.g., redirect to login)
+                showProgressStatus('Failed to refresh authentication', true);
                 }
             }
         }
@@ -144,7 +192,7 @@
         async function updateProgress(completed, score, additionalData) {
             if (!currentToken) {
                 console.error('No token found. Progress cannot be saved.');
-                return;
+                return false;
             }
 
             try {
@@ -155,11 +203,9 @@
                         'Authorization': `Bearer ${currentToken}`
                     },
                     body: JSON.stringify({
-                        progress: {
-                            completed,
-                            score,
-                            additionalData
-                        }
+                        completed: completed,
+                        score: score,
+                        additionalData: additionalData
                     })
                 });
 
@@ -168,21 +214,22 @@
                 }
 
                 console.log(`Progress updated for module ${MODULE_ID}`);
+                return true;
             } catch (error) {
                 console.error('Error updating progress:', error);
                 if (error.message.includes('TokenExpiredError')) {
                     const newToken = await refreshToken();
                     if (newToken) {
-                        await updateProgress(completed, score, additionalData);
+                        return await updateProgress(completed, score, additionalData);
                     } else {
                         console.error('Failed to refresh token and update progress');
-                // TODO: Handle failed refresh (e.g., redirect to login)
+                        return false;
                     }
-                }
+                }return false;
             }
         }
 
-        // Immediately invoke function to set up event listeners and initialize
+        // Initialize
         (async function() {
             const urlToken = new URLSearchParams(window.location.search).get('token');
             if (urlToken) {
@@ -194,7 +241,7 @@
                     updateGameFrameSrc(currentToken);
                 } else {
                     console.log('Token from URL is invalid. Attempting to refresh...');
-                    currentToken = urlToken; // Set current token even if invalid for refresh attempt
+                    currentToken = urlToken;
                     const newToken = await refreshToken();
                     if (newToken) {
                         console.log('Successfully refreshed token. Proceeding...');
@@ -202,12 +249,11 @@
                         updateGameFrameSrc(currentToken);
                     } else {
                         console.error('Failed to refresh token. Redirecting to login...');
-                        // TODO: Implement redirect to loginwindow.location.href = `${HUB_ORIGIN}/login?redirect=${encodeURIComponent(window.location.href)}`;
+                        window.location.href = `${HUB_ORIGIN}/login?redirect=${encodeURIComponent(window.location.href)}`;
                     }
                 }
             } else {
                 console.log('No token found in URL. Redirecting to login...');
-                // TODO: Implement redirect to login
                 window.location.href = `${HUB_ORIGIN}/login?redirect=${encodeURIComponent(window.location.href)}`;
             }
 
@@ -217,14 +263,11 @@
                 if (newToken) {
                     console.log('Token refreshed successfully');
                 } else {
-                    console.error('Failed to refresh token');// TODO: Handle failed refresh (e.g., redirect to login)
+                    console.error('Failed to refresh token');
                 }
-            }, 15 * 60 * 1000); // Refresh every 15 minutes
+            }, 15 * 60 * 1000);
 
-            // Listen for messages from the iframe
-            window.addEventListener('message', handleMessage);
-
-            console.log('Token management setup complete');
+            window.addEventListener('message', handleMessage);console.log('Token management setup complete');
         })();
     </script>
 </body>
