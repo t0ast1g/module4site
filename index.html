@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JumperAI Game - Module 4</title>
+    <title>JumperAI Game - Module4</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -56,8 +56,7 @@
             if (!token) return null;
             try {
                 const base64Url = token.split('.')[1];
-                const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-                return JSON.parse(window.atob(base64));
+                const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');return JSON.parse(window.atob(base64));
             } catch (error) {
                 console.error('Error parsing token:', error);
                 return null;
@@ -66,13 +65,19 @@
 
         async function validateToken(token) {
             try {
+                console.log('Validating token:', token);
                 const response = await fetch(`${SERVER_URL}/validate-token`, {
                     method: 'GET',
                     headers: {
                         'Authorization': `Bearer ${token}`
                     }
                 });
+                if (!response.ok) {
+                    console.error('Token validation failed:', response.status, response.statusText);
+                    return false;
+                }
                 const data = await response.json();
+                console.log('Token validation response:', data);
                 return data.valid;
             } catch (error) {
                 console.error('Error validating token:', error);
@@ -82,6 +87,7 @@
 
         async function refreshToken() {
             try {
+                console.log('Attempting to refresh token');
                 const response = await fetch(`${SERVER_URL}/refresh-token`, {
                     method: 'POST',
                     headers: {
@@ -89,13 +95,19 @@
                         'Authorization': `Bearer ${currentToken}`
                     }
                 });
+                if (!response.ok) {
+                    console.error('Token refresh failed:', response.status, response.statusText);
+                    return null;
+                }
                 const data = await response.json();
                 if (data.token) {
+                    console.log('Token refreshed successfully');
                     currentToken = data.token;
                     updateGameFrameSrc(currentToken);
                     return data.token;
                 }
-                throw new Error('No token in refresh response');
+                console.error('No token in refresh response');
+                return null;
             } catch (error) {
                 console.error('Error refreshing token:', error);
                 return null;
@@ -105,6 +117,7 @@
         function updateGameFrameSrc(token) {
             const gameFrame = document.getElementById('module-4-frame');
             const gameUrlWithToken = `${GAME_URL}?token=${encodeURIComponent(token)}`;
+            console.log('Updating game frame src with new token');
             gameFrame.src = gameUrlWithToken;
         }
 
@@ -123,6 +136,7 @@
                     updateGameFrameSrc(newToken);
                 } else {
                     console.error('Failed to refresh token on game request');
+                    // TODO: Handle failed refresh (e.g., redirect to login)
                 }
             }
         }
@@ -162,6 +176,7 @@
                         await updateProgress(completed, score, additionalData);
                     } else {
                         console.error('Failed to refresh token and update progress');
+                // TODO: Handle failed refresh (e.g., redirect to login)
                     }
                 }
             }
@@ -178,11 +193,22 @@
                     currentToken = urlToken;
                     updateGameFrameSrc(currentToken);
                 } else {
-                    console.log('Token from URL is invalid.');
-                    // Handle invalid token (e.g., redirect to login)
+                    console.log('Token from URL is invalid. Attempting to refresh...');
+                    currentToken = urlToken; // Set current token even if invalid for refresh attempt
+                    const newToken = await refreshToken();
+                    if (newToken) {
+                        console.log('Successfully refreshed token. Proceeding...');
+                        currentToken = newToken;
+                        updateGameFrameSrc(currentToken);
+                    } else {
+                        console.error('Failed to refresh token. Redirecting to login...');
+                        // TODO: Implement redirect to loginwindow.location.href = `${HUB_ORIGIN}/login?redirect=${encodeURIComponent(window.location.href)}`;
+                    }
                 }
             } else {
-                console.log('No token found in URL.');// Handle missing token (e.g., redirect to login)
+                console.log('No token found in URL. Redirecting to login...');
+                // TODO: Implement redirect to login
+                window.location.href = `${HUB_ORIGIN}/login?redirect=${encodeURIComponent(window.location.href)}`;
             }
 
             // Set up token refresh interval
@@ -191,7 +217,7 @@
                 if (newToken) {
                     console.log('Token refreshed successfully');
                 } else {
-                    console.error('Failed to refresh token');
+                    console.error('Failed to refresh token');// TODO: Handle failed refresh (e.g., redirect to login)
                 }
             }, 15 * 60 * 1000); // Refresh every 15 minutes
 
