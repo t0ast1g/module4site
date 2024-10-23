@@ -63,7 +63,7 @@
             }
         }
 
-        async function validateToken(token) {
+        async function validateAndRefreshToken(token) {
             try {
                 const response = await fetch(`${SERVER_URL}/validate-token`, {
                     method: 'GET',
@@ -72,10 +72,18 @@
                     }
                 });
                 const data = await response.json();
-                return data.valid;
+                if (data.valid) {
+                    return { valid: true, token };
+                } else if (data.error === 'TokenExpiredError') {
+                    console.log('Token expired, attempting to refresh...');
+                    return await refreshToken();
+                } else {
+                    console.error('Token invalid:', data.error);
+                    return { valid: false, token: null };
+                }
             } catch (error) {
                 console.error('Error validating token:', error);
-                return false;
+                return { valid: false, token: null };
             }
         }
 
@@ -108,6 +116,9 @@
                 console.log(`Progress updated for module ${MODULE_ID}`);
             } catch (error) {
                 console.error('Error updating progress:', error);
+                if (error.message.includes('TokenExpiredError')) {
+                    await refreshAndRetry(() => updateProgress(completed, score, additionalData));
+                }
             }
         }
 
@@ -134,6 +145,9 @@
                 return progress;
             } catch (error) {
                 console.error('Error loading progress:', error);
+                if (error.message.includes('TokenExpiredError')) {
+                    return await refreshAndRetry(loadProgress);
+                }
                 return null;
             }
         }
@@ -178,10 +192,22 @@
                 const data = await response.json();
                 if (data.token) {
                     await storeTokenWithRetry(data.token);
-                    return data.token;
-                }throw new Error('No token in refresh response');
+                    return { valid: true, token: data.token };
+                }
+                throw new Error('No token in refresh response');
             } catch (error) {
                 console.error('Error refreshing token:', error);
+                return { valid: false, token: null };
+            }
+        }
+
+        async function refreshAndRetry(operation) {
+            const refreshResult = await refreshToken();
+            if (refreshResult.valid) {
+                return await operation();
+            } else {
+                console.error('Failed to refresh token. Please log in again.');
+                // Redirect to login or show a message to the user
                 return null;
             }
         }
@@ -212,29 +238,27 @@
                 const urlToken = new URLSearchParams(window.location.search).get('token');
                 if (urlToken) {
                     console.log('Token found in URL, validating...');
-                    const isValid = await validateToken(urlToken);
-                    if (isValid) {
+                    const validationResult = await validateAndRefreshToken(urlToken);
+                    if (validationResult.valid) {
                         console.log('Token from URL is valid. Storing token and proceeding...');
-                        await storeTokenWithRetry(urlToken);} else {
+                        await storeTokenWithRetry(validationResult.token);} else {
                         console.log('Token from URL is invalid.');
                     }
                 } else {
                     const storedToken = localStorage.getItem('token');
                     if (storedToken) {
                         console.log('Token found in storage, validating...');
-                        const isValid = await validateToken(storedToken);
-                        if (isValid) {
+                        const validationResult = await validateAndRefreshToken(storedToken);
+                        if (validationResult.valid) {
                             console.log('Stored token is valid. Proceeding...');
-                            currentToken = storedToken;
-                            startTokenSendingInterval(storedToken);
+                            currentToken = validationResult.token;
+                            startTokenSendingInterval(validationResult.token);
                         } else {
-                            console.log('Stored token is invalid.');
-                            localStorage.removeItem('token');
-                currentToken = null;
+                            console.log('Stored token is invalid.');localStorage.removeItem('token');
+                            currentToken = null;
                         }
                     } else {
-                        console.log('No token found.');
-                    }
+                        console.log('No token found.');}
                 }
 
                 if (currentToken) {
@@ -249,23 +273,34 @@
             await initializeToken();
 
             // Set up token refresh interval
-            setInterval(refreshToken, 30 * 60 * 1000); // Refresh every 30 minutes
+            setInterval(async () => {
+                const refreshResult = await refreshToken();
+                if (refreshResult.valid) {
+                    console.log('Token refreshed successfully');
+                } else {
+                    console.error('Failed to refresh token');
+                }
+            }, 15 * 60 * 1000); // Refresh every 15 minutes
 
             // Listen for messages from the iframe
-            window.addEventListener('message', (event) => {
+            window.addEventListener('message', async (event) => {
                 if (!GAME_ORIGINS.includes(event.origin)) {
                     console.log('Received message from unexpected origin:', event.origin);
                     return;
                 }
-                
                 console.log('Received message from game frame:', event.data);
                 if (event.data.type === 'MODULE_COMPLETED') {
-                    onModuleCompleted(event.data.score, event.data.additionalData);
+                    await onModuleCompleted(event.data.score, event.data.additionalData);
                 } else if (event.data.type === 'GET_TOKEN') {
                     console.log('Token requested by game:', currentToken);
                     sendTokenToGame(currentToken);
                 } else if (event.data.type === 'REFRESH_TOKEN') {
-                    refreshToken();
+                    const refreshResult = await refreshToken();
+                    if (refreshResult.valid) {
+                        sendTokenToGame(refreshResult.token);
+                    } else {
+                        console.error('Failed to refresh token on game request');
+                    }
                 }
             });
 
