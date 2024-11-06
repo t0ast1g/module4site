@@ -249,12 +249,10 @@
                         updateGameFrameSrc(currentToken);
                     } else {
                         console.error('Failed to refresh token. Redirecting to login...');
-                        window.location.href = `${HUB_ORIGIN}/login?redirect=${encodeURIComponent(window.location.href)}`;
                     }
                 }
             } else {
                 console.log('No token found in URL. Redirecting to login...');
-                window.location.href = `${HUB_ORIGIN}/login?redirect=${encodeURIComponent(window.location.href)}`;
             }
 
             // Set up token refresh interval
